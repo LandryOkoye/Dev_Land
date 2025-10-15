@@ -1,6 +1,7 @@
 package com.landryokoye.auth_service.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.landryokoye.auth_service.dto.*;
 import com.landryokoye.auth_service.enums.Roles;
 import com.landryokoye.auth_service.exceptions.InvalidRequestException;
@@ -25,6 +26,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Optional;
+
 @Service
 public class AuthServiceImpl implements AuthService{
 
@@ -41,6 +44,8 @@ public class AuthServiceImpl implements AuthService{
     private ModelMapper modelMapper;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private GoogleAuthService googleAuthService;
 
     // Feign Clients
     @Autowired
@@ -56,7 +61,7 @@ public class AuthServiceImpl implements AuthService{
                 log.info("User Account created!");
 
                 /* Use ObjectMapper to convert the raw object to the specific type (UserDto).
-                      becuase the body recieved for the response is a linkedHashMap and cant be cast to a class like UserDto.
+                      Because the body received for the response is a linkedHashMap and cant be cast to a class like UserDto.
                  */
                 UserDto userDto = objectMapper.convertValue(apiResponse.getBody(), UserDto.class);
                 return userDto;
@@ -76,8 +81,59 @@ public class AuthServiceImpl implements AuthService{
     }
 
     @Override
-    public AuthResponse GoogleSignIn(String IdToken) {
-        return null;
+    public AuthResponse GoogleSignIn(String id_Token) {
+        Optional<GoogleIdToken.Payload> payloadOpt = googleAuthService.verify(id_Token);
+        if(payloadOpt.isPresent()){
+            GoogleIdToken.Payload payload = payloadOpt.get();
+            String firstName = payload.get("givenName").toString();
+            String lastName = payload.get("familyName").toString();
+            String sex = payload.get("gender").toString();
+            String email = payload.getEmail();
+            String profileImg = payload.get("picture").toString();
+            String uid = payload.getSubject();
+            String username = payload.get("name").toString();
+
+            ResponseEntity<ApiResponse> response = userService.getUserByEmail(email);
+            ApiResponse body;
+            User user = new User();
+
+            if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
+                assert response.getBody() != null;
+                user = objectMapper.convertValue(response.getBody().getBody(), User.class );
+            }else {
+
+                CreateUserRequest request = new CreateUserRequest(
+                        firstName,
+                        lastName,
+                        username,
+                        email,
+                        null,
+                        sex,
+                        Roles.AUTHOR,
+                        uid
+                );
+
+                ResponseEntity<ApiResponse> apiResponse = userService.createUser(request);
+                if(apiResponse.hasBody() && apiResponse.getStatusCode().is2xxSuccessful()){
+                    user = objectMapper.convertValue(apiResponse.getBody().getBody(), User.class);
+                }
+            }
+
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            user.getUsername(),
+                            null
+                    )
+            );
+            log.debug("Authentication Done");
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.debug("Context set");
+            JwtService jwt = new JwtService();
+            String  jwt_token = jwtService.generateToken(authentication);
+            String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
+            log.debug("Jwt Token generated");
+            return new AuthResponse(jwt_token, jwt_refresh_token);
+        }
     }
 
     @Override

@@ -21,7 +21,9 @@ public record CreateUserRequest(
     @NotNull
     String sex,
     @Nullable
-    Roles roles
+    Roles roles,
+    @Nullable
+    String google_id
 
 ) {
 

@@ -30,7 +30,10 @@ public class SecurityConfig {
         return http
                 .csrf(c -> c.disable())
                 .authorizeHttpRequests(req -> req
-                        .requestMatchers("/auth/register", "/auth/login", "/auth/home").permitAll()
+                        .requestMatchers("/auth/register",
+                                "/auth/login",
+                                "/auth/home",
+                                "/auth/google").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

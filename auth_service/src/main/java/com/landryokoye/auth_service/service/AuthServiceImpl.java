@@ -83,57 +83,58 @@ public class AuthServiceImpl implements AuthService{
     @Override
     public AuthResponse GoogleSignIn(String id_Token) {
         Optional<GoogleIdToken.Payload> payloadOpt = googleAuthService.verify(id_Token);
-        if(payloadOpt.isPresent()){
-            GoogleIdToken.Payload payload = payloadOpt.get();
-            String firstName = payload.get("givenName").toString();
-            String lastName = payload.get("familyName").toString();
-            String sex = payload.get("gender").toString();
-            String email = payload.getEmail();
-            String profileImg = payload.get("picture").toString();
-            String uid = payload.getSubject();
-            String username = payload.get("name").toString();
-
-            ResponseEntity<ApiResponse> response = userService.getUserByEmail(email);
-            ApiResponse body;
-            User user = new User();
-
-            if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
-                assert response.getBody() != null;
-                user = objectMapper.convertValue(response.getBody().getBody(), User.class );
-            }else {
-
-                CreateUserRequest request = new CreateUserRequest(
-                        firstName,
-                        lastName,
-                        username,
-                        email,
-                        null,
-                        sex,
-                        Roles.AUTHOR,
-                        uid
-                );
-
-                ResponseEntity<ApiResponse> apiResponse = userService.createUser(request);
-                if(apiResponse.hasBody() && apiResponse.getStatusCode().is2xxSuccessful()){
-                    user = objectMapper.convertValue(apiResponse.getBody().getBody(), User.class);
-                }
-            }
-
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            user.getUsername(),
-                            null
-                    )
-            );
-            log.debug("Authentication Done");
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.debug("Context set");
-            JwtService jwt = new JwtService();
-            String  jwt_token = jwtService.generateToken(authentication);
-            String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
-            log.debug("Jwt Token generated");
-            return new AuthResponse(jwt_token, jwt_refresh_token);
+        if(payloadOpt.isEmpty()){
+            throw new IllegalStateException("Empty Payload");
         }
+        GoogleIdToken.Payload payload = payloadOpt.get();
+        String firstName = payload.get("givenName").toString();
+        String lastName = payload.get("familyName").toString();
+        String sex = payload.get("gender").toString();
+        String email = payload.getEmail();
+        String profileImg = payload.get("picture").toString();
+        String uid = payload.getSubject();
+        String username = payload.get("name").toString();
+
+        ResponseEntity<ApiResponse> response = userService.getUserByEmail(email);
+        ApiResponse body;
+        User user = new User();
+
+        if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
+            assert response.getBody() != null;
+            user = objectMapper.convertValue(response.getBody().getBody(), User.class );
+        }else {
+
+            CreateUserRequest request = new CreateUserRequest(
+                    firstName,
+                    lastName,
+                    username,
+                    email,
+                    null,
+                    sex,
+                    Roles.AUTHOR,
+                    uid
+            );
+
+            ResponseEntity<ApiResponse> apiResponse = userService.createUser(request);
+            if(apiResponse.hasBody() && apiResponse.getStatusCode().is2xxSuccessful()){
+                user = objectMapper.convertValue(apiResponse.getBody().getBody(), User.class);
+            }
+        }
+
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        user.getUsername(),
+                        null
+                )
+        );
+        log.debug("Authentication Done");
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        log.debug("Context set");
+        JwtService jwt = new JwtService();
+        String  jwt_token = jwtService.generateToken(authentication);
+        String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
+        log.debug("Jwt Token generated");
+        return new AuthResponse(jwt_token, jwt_refresh_token);
     }
 
     @Override

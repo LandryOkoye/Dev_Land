@@ -1,19 +1,20 @@
 package com.landryokoye.auth_service.service;
 
-import com.landryokoye.auth_service.dto.AuthResponse;
-import com.landryokoye.auth_service.dto.CreateUserRequest;
-import com.landryokoye.auth_service.dto.SignInRequest;
-import com.landryokoye.auth_service.dto.UserDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.landryokoye.auth_service.dto.*;
 import com.landryokoye.auth_service.enums.Roles;
 import com.landryokoye.auth_service.exceptions.InvalidRequestException;
 import com.landryokoye.auth_service.exceptions.ResourceNotFoundException;
 import com.landryokoye.auth_service.feignclient.UserService;
 import com.landryokoye.auth_service.model.User;
 import com.landryokoye.auth_service.security.JwtService;
+import feign.FeignException;
+import org.apache.http.HttpStatus;
 import org.modelmapper.ModelMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -38,6 +39,8 @@ public class AuthServiceImpl implements AuthService{
     private PasswordEncoder passwordEncoder;
     @Autowired
     private ModelMapper modelMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     // Feign Clients
     @Autowired
@@ -45,36 +48,31 @@ public class AuthServiceImpl implements AuthService{
 
     @Override
     public UserDto createUser(CreateUserRequest request) {
+        try{
+            ResponseEntity<ApiResponse> response = userService.createUser(request);
+            if(response.getStatusCode().is2xxSuccessful()){
+                ApiResponse apiResponse = response.getBody();
+                assert apiResponse != null;
+                log.info("User Account created!");
 
-        Roles roles = request.role() != null ? request.role() : Roles.AUTHOR;
-        CreateUserRequest updatedRequest = new CreateUserRequest(
-                request.firstName(),
-                request.lastName(),
-                request.username(),
-                request.email(),
-                request.password(),
-                request.sex(),
-                roles
-        );
+                /* Use ObjectMapper to convert the raw object to the specific type (UserDto).
+                      becuase the body recieved for the response is a linkedHashMap and cant be cast to a class like UserDto.
+                 */
+                UserDto userDto = objectMapper.convertValue(apiResponse.getBody(), UserDto.class);
+                return userDto;
+            } else if (response.getStatusCode().is4xxClientError()) {
+                ApiResponse err = response.getBody();
+                throw new IllegalCallerException("Registration failed: " + err);
+            }else{
+                throw new RuntimeException("Unknown error with status: " + response.getStatusCode());
+            }
 
-        ResponseEntity<UserDto> response = userService.createUser(updatedRequest);
-
-        if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
-            log.info("Response has body");
-            UserDto user = new UserDto();
-            var responseBody = response.getBody();
-            user.setId(responseBody.getId());
-            user.setFirstName(responseBody.getFirstName());
-            user.setLastName(responseBody.getLastName());
-            user.setUsername(responseBody.getUsername());
-            user.setPassword(responseBody.getPassword());
-            user.setSex(responseBody.getSex());
-            user.setRoles(responseBody.getRoles());
-            return user;
+        }catch(FeignException e){
+            if(e.status() == 400) {
+                throw new RuntimeException("Feign Client 400 error : " + e.getMessage());
+            }
+            throw new RuntimeException("Feign Service Call Failed: ", e.getCause());
         }
-        log.debug("Error creating user");
-        throw new InvalidRequestException("Error creating user, maybe invalid credentials");
-
     }
 
     @Override
@@ -94,11 +92,13 @@ public class AuthServiceImpl implements AuthService{
                             request.password()
                     )
             );
+            log.debug("Authentication Done");
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.debug("Context set");
             JwtService jwt = new JwtService();
             String  jwt_token = jwtService.generateToken(authentication);
             String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
-
+            log.debug("Jwt Token generated");
             return new AuthResponse(jwt_token, jwt_refresh_token);
         } catch (AuthenticationException e) {
             throw new IllegalStateException(e.getCause());

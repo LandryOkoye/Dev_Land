@@ -19,10 +19,10 @@ import java.util.function.Function;
 public class JwtService {
 
     private static final Logger log = LoggerFactory.getLogger(JwtService.class);
-//    @Value("${JWT_SECRET}")
-//    private String SECRET_KEY;
 
-    private static final String SECRET_KEY = "GcZfX3X6ATe9viJkEQUVUUqU/f7vIBDYN2feR4rcWr1ZeE8RK9T9rbfEuVdo6IV2drjyCQDuUrANpUpdX8zZGA==";
+    @Value("${jwt.secret}")
+    private String SECRET_KEY;
+//    private static final String SECRET_KEY = "GcZfX3X6ATe9viJkEQUVUUqU/f7vIBDYN2feR4rcWr1ZeE8RK9T9rbfEuVdo6IV2drjyCQDuUrANpUpdX8zZGA==";
     private final long EXP_TIME = 10 * 60 * 1000;
 
     public String generateToken(Authentication authentication) {
@@ -34,7 +34,7 @@ public class JwtService {
                 .claim("user_id", user.getId())
                 .claim("email", user.getEmail())
                 .claim("role", authentication.getAuthorities())
-                .claim("google_id", user.getGoogleId().isEmpty() ? " " : user.getGoogleId())
+                .claim("google_id", user.getGoogleId() == null ? null : user.getGoogleId())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXP_TIME))
                 .signWith(getKey(), Jwts.SIG.HS512)

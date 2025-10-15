@@ -9,9 +9,9 @@ public class UserDto {
     String username;
     String email;
     String password;
+    String google_id;
     String sex;
     Roles roles;
-    String google_id;
 
     public Long getId() {
         return id;

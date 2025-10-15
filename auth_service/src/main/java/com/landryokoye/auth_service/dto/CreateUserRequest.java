@@ -21,7 +21,7 @@ public record CreateUserRequest(
     @NotNull
     String sex,
     @Nullable
-    Roles role
+    Roles roles
 
 ) {
 

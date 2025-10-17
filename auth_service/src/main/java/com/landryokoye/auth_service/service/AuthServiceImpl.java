@@ -21,12 +21,20 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+
+import static org.springframework.http.HttpStatus.OK;
 
 @Service
 public class AuthServiceImpl implements AuthService{
@@ -46,6 +54,8 @@ public class AuthServiceImpl implements AuthService{
     private ObjectMapper objectMapper;
     @Autowired
     private GoogleAuthService googleAuthService;
+    @Autowired
+    private CustomUserDetailsService customUserDetailsService;
 
     // Feign Clients
     @Autowired
@@ -87,29 +97,31 @@ public class AuthServiceImpl implements AuthService{
             throw new IllegalStateException("Empty Payload");
         }
         GoogleIdToken.Payload payload = payloadOpt.get();
-        String firstName = payload.get("givenName").toString();
-        String lastName = payload.get("familyName").toString();
-        String sex = payload.get("gender").toString();
+        String firstName = (String) payload.get("given_name");
+        String lastName = (String) payload.get("family_name");
+        String sex = (String) payload.get("gender");
         String email = payload.getEmail();
-        String profileImg = payload.get("picture").toString();
+        String profileImg = (String) payload.get("picture");
         String uid = payload.getSubject();
-        String username = payload.get("name").toString();
+        String username = (String) payload.get("name");
 
-        ResponseEntity<ApiResponse> response = userService.getUserByEmail(email);
-        ApiResponse body;
-        User user = new User();
+        User user = null;
 
-        if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
-            assert response.getBody() != null;
-            user = objectMapper.convertValue(response.getBody().getBody(), User.class );
-        }else {
+        try{
+            ResponseEntity<ApiResponse> response = userService.getUserByEmail(email);
+            if(response.getStatusCode().is2xxSuccessful() && response.hasBody()){
+                assert response.getBody() != null;
+                user = objectMapper.convertValue(response.getBody().getBody(), User.class );
+            }
 
+        }catch (FeignException e){
+            String randomPassword = UUID.randomUUID().toString();
             CreateUserRequest request = new CreateUserRequest(
                     firstName,
                     lastName,
-                    username,
+                    username.replaceAll("\\s+", ""),
                     email,
-                    null,
+                    randomPassword,
                     sex,
                     Roles.AUTHOR,
                     uid
@@ -119,23 +131,33 @@ public class AuthServiceImpl implements AuthService{
             if(apiResponse.hasBody() && apiResponse.getStatusCode().is2xxSuccessful()){
                 user = objectMapper.convertValue(apiResponse.getBody().getBody(), User.class);
             }
+        } catch (Exception e) {
+            throw new RuntimeException("Unknown server error" + e);
         }
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        user.getUsername(),
-                        null
-                )
-        );
-        log.debug("Authentication Done");
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        log.debug("Context set");
-        JwtService jwt = new JwtService();
-        String  jwt_token = jwtService.generateToken(authentication);
-        String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
-        log.debug("Jwt Token generated");
-        return new AuthResponse(jwt_token, jwt_refresh_token);
-    }
+        try{
+            UserDetails userDetails = customUserDetailsService.loadUserByUsername(user.getEmail());
+
+            List<GrantedAuthority> authorities = new ArrayList<>();
+            authorities.add(new SimpleGrantedAuthority("ROLE_AUTHOR"));
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails,
+                    null,  // Using the subject claim form the Google payload as credentials
+                    userDetails.getAuthorities() != null ? userDetails.getAuthorities() : authorities
+            );
+            log.debug("Authentication Done");
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.debug("Context set");
+            String  jwt_token = jwtService.generateToken(authentication);
+            String jwt_refresh_token = jwtService.generateRefreshToken(authentication);
+            log.debug("Jwt Token generated");
+            return new AuthResponse(jwt_token, jwt_refresh_token);
+        }catch (AuthenticationException e){
+            throw new RuntimeException("Authentication failed during Google sign-in" + e);
+        }
+
+
+}
 
     @Override
     public AuthResponse SignIn(SignInRequest request) {

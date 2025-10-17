@@ -30,7 +30,7 @@ public class JwtService {
 
         User user = (User) authentication.getPrincipal();
         return Jwts.builder()
-                .subject(authentication.getName())
+                .subject(user.getUsername())
                 .claim("user_id", user.getId())
                 .claim("email", user.getEmail())
                 .claim("role", authentication.getAuthorities())

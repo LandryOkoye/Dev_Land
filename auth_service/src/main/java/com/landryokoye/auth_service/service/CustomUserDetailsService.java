@@ -35,6 +35,9 @@ public class CustomUserDetailsService implements UserDetailsService{
             try {
                 ResponseEntity<ApiResponse> response = userService.getUserByEmail(usernameOrEmail);
                 assert response.getBody() != null;
+                if (response.getBody() == null){
+                    throw new ResourceNotFoundException("User not found");
+                }
                 user = objectMapper.convertValue(response.getBody().getBody(), User.class);
                 log.debug("user found in the DB as: " + user);
             } catch (ResourceNotFoundException e) {

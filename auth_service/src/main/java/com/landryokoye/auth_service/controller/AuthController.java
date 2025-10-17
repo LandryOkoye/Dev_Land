@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
 
 import static org.springframework.http.HttpStatus.*;
@@ -62,9 +63,22 @@ public class AuthController {
     }
 
     @PostMapping("/oauth2/google")
-    ResponseEntity<ApiResponse> GoogleSignIn(String id_token){
-        //
-        return null;
+    ResponseEntity<ApiResponse> GoogleSignIn(@RequestHeader("X-ID-TOKEN") String id_token){
+        assert id_token != null;
+        if(id_token.isEmpty()){
+            return ResponseEntity.status(NO_CONTENT).body(new ApiResponse("provide a ID Token o continue", NO_CONTENT));
+        }
+        try {
+            if(id_token.startsWith("Token ")){
+                AuthResponse response = authService.GoogleSignIn(id_token.substring(6));
+                if(response != null){
+                    return ResponseEntity.ok(new ApiResponse("Success", response));
+                }
+            }
+        } catch (IllegalStateException | IllegalArgumentException | AuthenticationException e) {
+            return ResponseEntity.status(EXPECTATION_FAILED).body(new ApiResponse(e.getCause().toString(), EXPECTATION_FAILED));
+        }
+        return ResponseEntity.status(INTERNAL_SERVER_ERROR).body(new ApiResponse("Unknown Error", INTERNAL_SERVER_ERROR));
     }
 
     @PostMapping("/logout") // this endpoint will ba called by the User-service to log out a user.

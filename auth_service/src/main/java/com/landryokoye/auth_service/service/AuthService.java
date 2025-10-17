@@ -1,6 +1,9 @@
 package com.landryokoye.auth_service.service;
 
-import com.landryokoye.auth_service.dto.*;
+import com.landryokoye.auth_service.dto.AuthResponse;
+import com.landryokoye.auth_service.dto.CreateUserRequest;
+import com.landryokoye.auth_service.dto.SignInRequest;
+import com.landryokoye.auth_service.dto.UserDto;
 
 public interface AuthService {
 

@@ -33,7 +33,7 @@ public class SecurityConfig {
                         .requestMatchers("/auth/register",
                                 "/auth/login",
                                 "/auth/home",
-                                "/auth/google").permitAll()
+                                "/auth/oauth2/google").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
